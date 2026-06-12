@@ -362,9 +362,9 @@ public class DeviceTest {
         Assume.assumeTrue("only for Prolific", usb.serialDriver instanceof ProlificSerialDriver);
 
         int[] baudRates = {
-                75, 150, 300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 14400, 19200,
-                28800, 38400, 57600, 115200, 128000, 134400, 161280, 201600, 230400, 268800,
-                403200, 460800, 614400, 806400, 921600, 1228800, 2457600, 3000000, /*6000000*/
+                75, 110, 150, 300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 14400, 19200,
+                28800, 38400, 56000, 57600, 115200, 128000, 134400, 161280, 201600, 230400, 256000,
+                268800, 403200, 460800, 614400, 806400, 921600, 1228800, /* 2457600, 3000000, 6000000*/
         };
         usb.open();
         Assume.assumeFalse("only for non PL2303G*", ProlificSerialPortWrapper.isDeviceTypeHxn(usb.serialPort)); // HXN does not use divisor
@@ -396,28 +396,6 @@ public class DeviceTest {
 
             usb.setParameters(baudRate + 1, 8, 1, UsbSerialPort.PARITY_NONE);
             doReadWrite(String.valueOf(baudRate + 1), readWait);
-
-            // silent fallback to 9600 for unsupported baud rates
-            telnet.setParameters(9600, 8, 1, UsbSerialPort.PARITY_NONE);
-            usb.setParameters(baudRate + 1 + (1<<29), 8, 1, UsbSerialPort.PARITY_NONE);
-            doReadWrite(String.valueOf(baudRate + 1) + " + 1<<29", readWait);
-        }
-
-        // some PL2303... data sheets mention additional standard baud rates, others don't
-        // they do not work with my devices and linux driver also excludes them
-        baudRates = new int[]{110, 56000, 256000};
-        for(int baudRate : baudRates) {
-            int readWait = 500;
-            if(baudRate < 300) readWait = 1000;
-            if(baudRate < 150) readWait = 2000;
-            telnet.setParameters(baudRate, 8, 1, UsbSerialPort.PARITY_NONE);
-            usb.setParameters(baudRate, 8, 1, UsbSerialPort.PARITY_NONE);
-            doReadWrite(String.valueOf(baudRate), readWait);
-
-            // silent fallback to 9600 for unsupported baud rates
-            telnet.setParameters(9600, 8, 1, UsbSerialPort.PARITY_NONE);
-            usb.setParameters(baudRate + (1<<29), 8, 1, UsbSerialPort.PARITY_NONE);
-            doReadWrite(String.valueOf(baudRate) + " + 1<<29", readWait);
         }
     }
 

@@ -30,9 +30,9 @@ public class ProlificSerialDriver implements UsbSerialDriver {
     private final String TAG = ProlificSerialDriver.class.getSimpleName();
 
     private final static int[] standardBaudRates = {
-            75, 150, 300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 14400, 19200,
-            28800, 38400, 57600, 115200, 128000, 134400, 161280, 201600, 230400, 268800,
-            403200, 460800, 614400, 806400, 921600, 1228800, 2457600, 3000000, 6000000
+            75, 150, 300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600,
+            14400, 19200, 28800, 38400, 57600, 115200, 230400, 460800,
+            614400, 921600, 1228800, 2457600, 3000000, 6000000
     };
     protected enum DeviceType { DEVICE_TYPE_01, DEVICE_TYPE_T, DEVICE_TYPE_HX, DEVICE_TYPE_HXN }
 
@@ -342,9 +342,6 @@ public class ProlificSerialDriver implements UsbSerialDriver {
         }
 
         private int filterBaudRate(int baudRate) {
-            if(BuildConfig.DEBUG && (baudRate & (3<<29)) == (1<<29)) {
-                return baudRate & ~(1<<29); // for testing purposes accept without further checks
-            }
             if (baudRate <= 0) {
                 throw new IllegalArgumentException("Invalid baud rate: " + baudRate);
             }
