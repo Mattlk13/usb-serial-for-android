@@ -13,10 +13,12 @@ import android.hardware.usb.UsbInterface;
 import android.util.Log;
 
 import com.hoho.android.usbserial.util.HexDump;
+import com.hoho.android.usbserial.util.MonotonicClock;
 import com.hoho.android.usbserial.util.UsbUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +100,19 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
         private static final int GET_LINE_CODING = 0x21;
         private static final int SET_CONTROL_LINE_STATE = 0x22;
         private static final int SEND_BREAK = 0x23;
+
+        private static final int NOTIFICATION_REQUEST_TYPE = 0xA1;
+        private static final int SERIAL_STATE = 0x20;
+        private static final int SERIAL_STATE_PACKET_SIZE = 10;
+        private static final int SERIAL_STATE_FLAG_CD = 0x01;
+        private static final int SERIAL_STATE_FLAG_DSR = 0x02;
+        private static final int SERIAL_STATE_FLAG_RI = 0x08;
+
+        private volatile int mSerialState = 0;
+        private volatile Thread mReadControlLinesThread = null;
+        private final Object mReadControlLinesThreadLock = new Object();
+        private boolean mStopReadControlLinesThread = false;
+        private Exception mReadControlLinesException = null;
 
         public CdcAcmSerialPort(UsbDevice device, int portNumber) {
             super(device, portNumber);
@@ -260,9 +275,71 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
             return len;
         }
 
+        private void readControlLinesThreadFunction() {
+            try {
+                byte[] buffer = new byte[Math.max(SERIAL_STATE_PACKET_SIZE, mControlEndpoint.getMaxPacketSize())];
+                while (!mStopReadControlLinesThread) {
+                    long endTime = MonotonicClock.millis() + 500;
+                    int readBytesCount = mConnection.bulkTransfer(mControlEndpoint, buffer, buffer.length, 500);
+                    if (readBytesCount == -1) {
+                        testConnection(MonotonicClock.millis() < endTime);
+                        continue;
+                    }
+                    if (readBytesCount != SERIAL_STATE_PACKET_SIZE) continue;
+                    if (buffer[0] != (byte)NOTIFICATION_REQUEST_TYPE) continue;
+                    if (buffer[1] != SERIAL_STATE) continue;
+                    int index = ((buffer[5] & 0xff) << 8) | (buffer[4] & 0xff);
+                    if (index != mControlIndex) continue;
+                    int payloadLength = ((buffer[7] & 0xff) << 8) | (buffer[6] & 0xff);
+                    if (payloadLength < 2) continue;
+                    mSerialState = ((buffer[9] & 0xff) << 8) | (buffer[8] & 0xff);
+                    Log.d(TAG, "control line state " + Arrays.toString(buffer));
+                }
+            } catch (Exception e) {
+                if (isOpen()) {
+                    mReadControlLinesException = e;
+                }
+            }
+        }
+
+        private int getSerialState() throws IOException {
+            if ((mReadControlLinesThread == null) && (mReadControlLinesException == null)) {
+                synchronized (mReadControlLinesThreadLock) {
+                    if (mReadControlLinesThread == null) {
+                        mSerialState = 0;
+                        mReadControlLinesThread = new Thread(this::readControlLinesThreadFunction);
+                        mReadControlLinesThread.setDaemon(true);
+                        mReadControlLinesThread.start();
+                    }
+                }
+            }
+
+            Exception readControlLinesException = mReadControlLinesException;
+            if (readControlLinesException != null) {
+                mReadControlLinesException = null;
+                throw new IOException(readControlLinesException);
+            }
+
+            return mSerialState;
+        }
+
+
         @Override
         protected void closeInt() {
             try {
+                synchronized (mReadControlLinesThreadLock) {
+                    if (mReadControlLinesThread != null) {
+                        try {
+                            mStopReadControlLinesThread = true;
+                            mReadControlLinesThread.join();
+                        } catch (Exception e) {
+                            Log.w(TAG, "An error occurred while waiting for control line read thread", e);
+                        }
+                        mStopReadControlLinesThread = false;
+                        mReadControlLinesThread = null;
+                        mReadControlLinesException = null;
+                    }
+                }
                 mConnection.releaseInterface(mControlInterface);
                 mConnection.releaseInterface(mDataInterface);
             } catch(Exception ignored) {}
@@ -321,6 +398,21 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
         }
 
         @Override
+        public boolean getCD() throws IOException {
+            return (getSerialState() & SERIAL_STATE_FLAG_CD) != 0;
+        }
+
+        @Override
+        public boolean getDSR() throws IOException {
+            return (getSerialState() & SERIAL_STATE_FLAG_DSR) != 0;
+        }
+
+        @Override
+        public boolean getRI() throws IOException {
+            return (getSerialState() & SERIAL_STATE_FLAG_RI) != 0;
+        }
+
+        @Override
         public void setRTS(boolean value) throws IOException {
             mRts = value;
             setDtrRts();
@@ -333,15 +425,20 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
 
         @Override
         public EnumSet<ControlLine> getControlLines() throws IOException {
+            int serialState = getSerialState();
             EnumSet<ControlLine> set = EnumSet.noneOf(ControlLine.class);
             if(mRts) set.add(ControlLine.RTS);
+            // no CTS
             if(mDtr) set.add(ControlLine.DTR);
+            if((serialState & SERIAL_STATE_FLAG_DSR) != 0) set.add(ControlLine.DSR);
+            if((serialState & SERIAL_STATE_FLAG_CD) != 0) set.add(ControlLine.CD);
+            if((serialState & SERIAL_STATE_FLAG_RI) != 0) set.add(ControlLine.RI);
             return set;
         }
 
         @Override
         public EnumSet<ControlLine> getSupportedControlLines() throws IOException {
-            return EnumSet.of(ControlLine.RTS, ControlLine.DTR);
+            return EnumSet.of(ControlLine.RTS, ControlLine.DTR, ControlLine.DSR, ControlLine.CD, ControlLine.RI);
         }
 
         @Override

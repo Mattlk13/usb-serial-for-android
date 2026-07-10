@@ -165,7 +165,7 @@ some other device specific drivers
 * Chrome OS CCD (Closed Case Debugging)
 
 and devices implementing the generic CDC/ACM protocol like
-* Qinheng CH9102
+* Qinheng CH343, CH9102
 * Microchip MCP2221
 * Arduino using ATmega32U4
 * Digispark using V-USB software USB

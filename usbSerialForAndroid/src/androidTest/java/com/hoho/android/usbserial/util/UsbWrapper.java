@@ -65,6 +65,7 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
     public boolean inputLinesSupported;
     public boolean inputLinesConnected;
     public boolean inputLinesOnlyRtsCts;
+    public boolean inputLineCtsSupported;
     public int writePacketSize = -1;
     public int writeBufferSize = -1;
     public int readBufferSize = -1;
@@ -111,7 +112,8 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
         isCdcAcmCh343 = serialDriver.getDevice().getVendorId() == UsbId.VENDOR_QINHENG && serialDriver.getDevice().getProductId() == 0x55D3;
 
         // output lines are supported by all common drivers
-        // input lines are supported by all common drivers except CDC
+        // input lines are supported by all common drivers, but only partly by CDC
+        inputLineCtsSupported = true;
         if (serialDriver instanceof FtdiSerialDriver) {
             outputLinesSupported = true;
             inputLinesSupported = true;
@@ -137,6 +139,10 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
                 inputLinesConnected = true;  // I only have 74LS138 connected at CH340, not connected at CH341A
         } else if (serialDriver instanceof CdcAcmSerialDriver) {
             outputLinesSupported = true;
+            inputLinesSupported = true;
+            if(isCdcAcmCh343)
+                inputLinesConnected = true;
+            inputLineCtsSupported = false;
         }
 
         if (serialDriver instanceof Cp21xxSerialDriver) {
@@ -322,10 +328,9 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
 
     public void setParameters(int baudRate, int dataBits, int stopBits, @UsbSerialPort.Parity int parity) throws IOException, InterruptedException {
         serialPort.setParameters(baudRate, dataBits, stopBits, parity);
-        if(serialDriver instanceof CdcAcmSerialDriver)
-            Thread.sleep(10); // arduino_leonardeo_bridge.ini needs some time
-        else
-            Thread.sleep(1);
+        //if(serialDriver instanceof CdcAcmSerialDriver)
+            //Thread.sleep(10); // arduino_leonardeo_bridge.ini needs some time
+        Thread.sleep(1);
     }
 
     /* return TRUE/FALSE/null instead of true/false/<throw UnsupportedOperationException> */

@@ -260,10 +260,6 @@ public class ProlificSerialDriver implements UsbSerialDriver {
             return mStatus;
         }
 
-        private boolean testStatusFlag(int flag) throws IOException {
-            return ((getStatus() & flag) == flag);
-        }
-
         @Override
         public void openInt() throws IOException {
             UsbInterface usbInterface = mDevice.getInterface(0);
@@ -474,17 +470,17 @@ public class ProlificSerialDriver implements UsbSerialDriver {
 
         @Override
         public boolean getCD() throws IOException {
-            return testStatusFlag(STATUS_FLAG_CD);
+            return (getStatus() & STATUS_FLAG_CD) != 0;
         }
 
         @Override
         public boolean getCTS() throws IOException {
-            return testStatusFlag(STATUS_FLAG_CTS);
+            return (getStatus() & STATUS_FLAG_CTS) != 0;
         }
 
         @Override
         public boolean getDSR() throws IOException {
-            return testStatusFlag(STATUS_FLAG_DSR);
+            return (getStatus() & STATUS_FLAG_DSR) != 0;
         }
 
         @Override
@@ -505,7 +501,7 @@ public class ProlificSerialDriver implements UsbSerialDriver {
 
         @Override
         public boolean getRI() throws IOException {
-            return testStatusFlag(STATUS_FLAG_RI);
+            return (getStatus() & STATUS_FLAG_RI) != 0;
         }
 
         @Override
