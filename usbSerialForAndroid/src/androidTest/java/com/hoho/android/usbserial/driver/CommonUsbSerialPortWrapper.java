@@ -4,6 +4,7 @@ import android.hardware.usb.UsbRequest;
 
 import com.hoho.android.usbserial.util.UsbUtils;
 
+import java.io.IOException;
 import java.util.LinkedList;
 
 public class CommonUsbSerialPortWrapper {
@@ -21,4 +22,10 @@ public class CommonUsbSerialPortWrapper {
         CommonUsbSerialPort commonSerialPort = (CommonUsbSerialPort) serialPort;
         commonSerialPort.mUsbRequestSupplier = supplier;
     }
+
+    public static void testConnection(UsbSerialPort serialPort, boolean full) throws IOException {
+        CommonUsbSerialPort commonSerialPort = (CommonUsbSerialPort) serialPort;
+        commonSerialPort.testConnection(full);
+    }
+
 }

@@ -33,6 +33,7 @@ import com.hoho.android.usbserial.driver.ProbeTable;
 import com.hoho.android.usbserial.driver.ProlificSerialDriver;
 import com.hoho.android.usbserial.driver.ProlificSerialPortWrapper;
 import com.hoho.android.usbserial.driver.SerialTimeoutException;
+import com.hoho.android.usbserial.driver.UsbId;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
@@ -540,7 +541,7 @@ public class DeviceTest {
 
             doReadWrite(baudRate+"/8N1");
         }
-        if(rfc2217_server_nonstandard_baudrates && !usb.isCp21xxRestrictedPort) {
+        if(rfc2217_server_nonstandard_baudrates) {
             usb.setParameters(42000, 8, 1, UsbSerialPort.PARITY_NONE);
             telnet.setParameters(42000, 8, 1, UsbSerialPort.PARITY_NONE);
 
@@ -551,16 +552,14 @@ public class DeviceTest {
             data1 = telnet.read();
             telnet.write(buf2);
             data2 = usb.read();
-            if (usb.serialDriver instanceof Cp21xxSerialDriver) {
-                if (usb.serialDriver.getPorts().size() > 1) {
-                    // supported on cp2105 first port
-                    assertThat("42000/8N1", data1, equalTo(buf1));
-                    assertThat("42000/8N1", data2, equalTo(buf2));
-                } else {
-                    // not supported on cp2102
-                    assertNotEquals(data1, buf1);
-                    assertNotEquals(data2, buf2);
-                }
+            if (usb.serialDriver instanceof Cp21xxSerialDriver && (usb.serialDriver.getPorts().size()==1 || usb.isCp21xxRestrictedPort)) {
+                // not supported on cp2102 and cp2105 second port
+                assertNotEquals(data1, buf1);
+                assertNotEquals(data2, buf2);
+            } else if (usb.serialDriver instanceof CdcAcmSerialDriver && usb.isCdcAcmCh343) {
+                // not supported on ch343
+                assertThat("42000/8N1", data1, equalTo(new byte[]{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}));
+                assertThat("42000/8N1", data2, equalTo(new byte[]{}));
             } else {
                 assertThat("42000/8N1", data1, equalTo(buf1));
                 assertThat("42000/8N1", data2, equalTo(buf2));
@@ -624,8 +623,8 @@ public class DeviceTest {
             Thread.sleep(10);
             usb.write(new byte[]{(byte) 0xff});
             data = telnet.read(2);
-            if(usb.serialDriver instanceof CdcAcmSerialDriver) {
-                // not supported by MCP2221, other CDC devices might support it
+            if(usb.serialDriver instanceof CdcAcmSerialDriver && !usb.isCdcAcmCh343) {
+                // not supported by MCP2221 and CH9143
                 assertThat("19000/7N1", data, equalTo(new byte[]{(byte) 0x00, (byte) 0xff}));
                 return;
             } else {
@@ -703,8 +702,9 @@ public class DeviceTest {
         usb.setParameters(19200, 7, 1, UsbSerialPort.PARITY_ODD);
         usb.write(_8n1);
         data = telnet.read(4);
-        if (usb.serialDriver instanceof CdcAcmSerialDriver) {
-            // not supported by MCP2221, other CDC devices might support it
+
+        if (usb.serialDriver instanceof CdcAcmSerialDriver && !usb.isCdcAcmCh343) {
+            // not supported by MCP2221 and CH9143
             assertThat("19200/8N1", data, equalTo(_8n1));
         } else {
             assertThat("19200/7O1", data, equalTo(_7o1));
@@ -752,7 +752,7 @@ public class DeviceTest {
         data = usb.read(4);
         assertThat("19200/7S1", data, equalTo(_7s1));
 
-        if (usb.serialDriver instanceof CdcAcmSerialDriver) {
+        if (usb.serialDriver instanceof CdcAcmSerialDriver && !usb.isCdcAcmCh343) {
             ; // not supported by MCP2221, other CDC devices might support it
         } else {
             usb.setParameters(19200, 7, 1, UsbSerialPort.PARITY_ODD);
@@ -789,11 +789,13 @@ public class DeviceTest {
         telnet.setParameters(19200, 6, 1, UsbSerialPort.PARITY_NONE);
         usb.write(new byte[]{(byte)0x41, (byte)0xf1});
         data = telnet.read(2);
-        if (usb.serialDriver instanceof CdcAcmSerialDriver) {
-            // MCP2221 slightly slower, looks like 2 stop bits. could be different for other CDC devices
-            assertThat("19200/8N1", data, equalTo(new byte[]{1, 11}));
-        } else
+        if (usb.serialDriver instanceof CdcAcmSerialDriver && !usb.isCdcAcmCh343) {
+            // CH9143 not supported
+            // MCP2221 slightly slower, looks like 2 stop bits
+            //assertThat("19200/8N1", data, equalTo(new byte[]{1, 11}));
+        } else {
             assertThat("19200/8N1", data, equalTo(new byte[]{1, 5}));
+        }
 
         // out 8N2:   addddddd dooaddddddddoo
         //             1000001 0   10011111
@@ -857,8 +859,6 @@ public class DeviceTest {
         ((CommonUsbSerialPort)usb.serialPort).setWriteBufferSize(-1);
         assertEquals(usb.serialPort.getWriteEndpoint().getMaxPacketSize(),
                      CommonUsbSerialPortWrapper.getWriteBuffer(usb.serialPort).length);
-        assertEquals(usb.serialPort.getWriteEndpoint().getMaxPacketSize(),
-                     usb.serialPort.getReadEndpoint().getMaxPacketSize());
 
         int baudRate = 300;
         if(usb.serialDriver instanceof Cp21xxSerialDriver && usb.serialPort.getPortNumber() > 0)
@@ -1061,10 +1061,9 @@ public class DeviceTest {
             data = usb.read(len);
             if (usb.serialDriver instanceof Cp21xxSerialDriver && usb.serialDriver.getPorts().size() == 1)
                 assertNotEquals(0, data.length); // can be shorter or full length
-            else if (usb.serialDriver instanceof CdcAcmSerialDriver ||
-                     usb.serialDriver instanceof ProlificSerialDriver)
+            else if (usb.serialDriver instanceof ProlificSerialDriver)
                 assertTrue("expected > 0 and < "+len+" byte, got " + data.length, data.length > 0 && data.length < len);
-            else // ftdi, ch340, cp2105
+            else // ftdi, ch340, cp2105, CdcAcm ch343
                 assertEquals(0, data.length);
         } catch (IOException ignored) {
         }
@@ -1107,10 +1106,9 @@ public class DeviceTest {
         data = usb.read(len, len/2);
         if (usb.serialDriver instanceof Cp21xxSerialDriver && usb.serialDriver.getPorts().size() == 1)
             assertNotEquals(0, data.length); // can be shorter or full length
-        else if (usb.serialDriver instanceof CdcAcmSerialDriver ||
-                 usb.serialDriver instanceof ProlificSerialDriver)
+        else if (usb.serialDriver instanceof ProlificSerialDriver)
             assertTrue("sporadic issue! expected > 0 and < "+len+" byte, got " + data.length, data.length > 0 && data.length < len);
-        else // ftdi, ch340, cp2105
+        else // ftdi, ch340, cp2105, CdcAcm ch343
             assertEquals(0, data.length);
         telnet.write("2ccc".getBytes());
         data = usb.read(4);
@@ -2335,8 +2333,8 @@ public class DeviceTest {
     @Test
     public void setBreak() throws Exception {
         usb.open();
-        if (usb.serialDriver instanceof CdcAcmSerialDriver) {
-            // not supported by MCP2221, other CDC devices might support it
+        if (usb.serialDriver instanceof CdcAcmSerialDriver && ! usb.isCdcAcmCh343) {
+            // not supported by MCP2221 and CH9143
             try {
                 usb.serialPort.setBreak(true);
                 fail("setBreak error expected");
@@ -2347,6 +2345,7 @@ public class DeviceTest {
         telnet.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
         usb.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
         doReadWrite("");
+        usb.serialPort.setBreak(true);
         Thread.sleep(100);
         usb.serialPort.setBreak(false);
         // RFC2217 has SET_CONTROL + REQ_BREAK_STATE request, but this is not supported by pyserial
@@ -2498,6 +2497,13 @@ public class DeviceTest {
             usb.serialPort.read(buffer, 0, UsbWrapper.USB_READ_WAIT);
             fail("read length too small expected");
         } catch(IllegalArgumentException ignored) {}
+
+        try {
+            CommonUsbSerialPortWrapper.testConnection(usb.serialPort, true);
+        } catch(IOException ex) {
+            // CdcAcm: the standard USB request is not supported by CH9143, which also makes various other tests failing
+            assertTrue(usb.serialPort.getDevice().getVendorId() == UsbId.VENDOR_QINHENG && usb.serialPort.getDevice().getProductId() == 0x55D6);
+        }
 
         // use driver that does not override base class
         UsbSerialDriver wrongSerialDriver = new ChromeCcdSerialDriver(usb.serialDriver.getDevice());

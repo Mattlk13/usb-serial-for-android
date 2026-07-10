@@ -8,7 +8,7 @@ android {
             // Used as fallback in usbSerialExample/build.gradle -> missingDimensionStrategy, but not for coverage report
             dimension 'device'
         }
-        mcp2221 {
+        ch343 {
             dimension 'device'
             testInstrumentationRunnerArguments = ['test_device_driver': 'CdcAcm']
         }

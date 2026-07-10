@@ -59,6 +59,8 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
 
     // device properties
     public boolean isCp21xxRestrictedPort; // second port of Cp2105 has limited dataBits, stopBits, parity
+    public boolean isCdcAcmCh343;
+
     public boolean outputLinesSupported;
     public boolean inputLinesSupported;
     public boolean inputLinesConnected;
@@ -106,6 +108,8 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
 
         // extract some device properties:
         isCp21xxRestrictedPort = serialDriver instanceof Cp21xxSerialDriver && serialDriver.getPorts().size()==2 && serialPort.getPortNumber() == 1;
+        isCdcAcmCh343 = serialDriver.getDevice().getVendorId() == UsbId.VENDOR_QINHENG && serialDriver.getDevice().getProductId() == 0x55D3;
+
         // output lines are supported by all common drivers
         // input lines are supported by all common drivers except CDC
         if (serialDriver instanceof FtdiSerialDriver) {
@@ -152,7 +156,7 @@ public class UsbWrapper implements SerialInputOutputManager.Listener {
             if(serialDriver.getDevice().getProductId() == UsbId.FTDI_FT231X)
                 writeBufferSize = 512;
         } else if (serialDriver instanceof CdcAcmSerialDriver) {
-            writePacketSize = 16; writeBufferSize = 32; // MCP2221 values, other devices might be different
+            writePacketSize = 32; writeBufferSize = 64; // CH343 values, other devices might be different
         }
 
         readBufferSize = writeBufferSize;
