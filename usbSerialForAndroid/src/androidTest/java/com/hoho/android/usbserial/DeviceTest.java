@@ -1970,10 +1970,20 @@ public class DeviceTest {
             } else {
                 usb.serialPort.getRI();
             }
-            fail("error expected");
+            fail("connection closed expected");
         } catch (IOException ignored) {
         } catch (UnsupportedOperationException ignored) {
         }
+        try {
+            usb.serialPort.getRI();
+            fail("connection closed expected");
+        } catch (IOException ignored) {
+        }
+        // reset error
+        usb.close(EnumSet.of(UsbWrapper.OpenCloseFlags.NO_CONTROL_LINE_INIT));
+        usb.open(EnumSet.of(UsbWrapper.OpenCloseFlags.NO_CONTROL_LINE_INIT, UsbWrapper.OpenCloseFlags.NO_IOMANAGER_THREAD));
+        usb.serialPort.getRI();
+        usb.serialPort.setRTS(true);
     }
 
     @Test

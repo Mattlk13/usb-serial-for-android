@@ -218,14 +218,13 @@ public class ProlificSerialDriver implements UsbSerialDriver {
                     }
                 }
             } catch (Exception e) {
-                if (isOpen())
-                    mReadStatusException = e;
+                mReadStatusException = e;
             }
             //Log.d(TAG, "end control line status thread " + mStopReadStatusThread + " " + (mReadStatusException == null ? "-" : mReadStatusException.getMessage()));
         }
 
         private int getStatus() throws IOException {
-            if ((mReadStatusThread == null) && (mReadStatusException == null)) {
+            if (mReadStatusThread == null) {
                 synchronized (mReadStatusThreadLock) {
                     if (mReadStatusThread == null) {
                         mStatus = 0;
@@ -249,14 +248,9 @@ public class ProlificSerialDriver implements UsbSerialDriver {
                     }
                 }
             }
-
-            /* throw and clear an exception which occurred in the status read thread */
-            Exception readStatusException = mReadStatusException;
             if (mReadStatusException != null) {
-                mReadStatusException = null;
-                throw new IOException(readStatusException);
+                throw new IOException(mReadStatusException);
             }
-
             return mStatus;
         }
 

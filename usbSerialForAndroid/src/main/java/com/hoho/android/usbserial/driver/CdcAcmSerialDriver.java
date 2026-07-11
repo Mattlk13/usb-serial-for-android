@@ -278,7 +278,7 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
         private void readControlLinesThreadFunction() {
             try {
                 byte[] buffer = new byte[Math.max(SERIAL_STATE_PACKET_SIZE, mControlEndpoint.getMaxPacketSize())];
-                while (!mStopReadControlLinesThread) {
+                while (!mStopReadControlLinesThread && mConnection!=null) {
                     long endTime = MonotonicClock.millis() + 500;
                     int readBytesCount = mConnection.bulkTransfer(mControlEndpoint, buffer, buffer.length, 500);
                     if (readBytesCount == -1) {
@@ -296,14 +296,14 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
                     Log.d(TAG, "control line state " + Arrays.toString(buffer));
                 }
             } catch (Exception e) {
-                if (isOpen()) {
-                    mReadControlLinesException = e;
-                }
+                mReadControlLinesException = e;
             }
         }
 
         private int getSerialState() throws IOException {
-            if ((mReadControlLinesThread == null) && (mReadControlLinesException == null)) {
+            if(mConnection == null)
+                throw new IOException("connection closed");
+            if (mReadControlLinesThread == null) {
                 synchronized (mReadControlLinesThreadLock) {
                     if (mReadControlLinesThread == null) {
                         mSerialState = 0;
@@ -313,16 +313,11 @@ public class CdcAcmSerialDriver implements UsbSerialDriver {
                     }
                 }
             }
-
-            Exception readControlLinesException = mReadControlLinesException;
-            if (readControlLinesException != null) {
-                mReadControlLinesException = null;
-                throw new IOException(readControlLinesException);
+            if (mReadControlLinesException != null) {
+                throw new IOException(mReadControlLinesException);
             }
-
             return mSerialState;
         }
-
 
         @Override
         protected void closeInt() {
