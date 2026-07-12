@@ -24,6 +24,9 @@ android {
         }
     }
     namespace 'com.hoho.android.usbserial.examples'
+    buildFeatures {
+        buildConfig true
+    }
 }
 
 dependencies {
